@@ -9,6 +9,7 @@ Chess\Game.class
 Chess\Queen.class
 Chess\Spot.class
 Chess\HumanPlayer.class
+Chess\ChessClient.class
 Chess\GameStatus.class
 Chess\Player.class
 Chess\King.class
