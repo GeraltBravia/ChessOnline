@@ -74,6 +74,16 @@ public class ClientHandler implements Runnable {
                     }
                 }
             }
+        } else if (message.startsWith("LEGAL ")) {
+            String from = message.substring(6).trim();
+            synchronized (ChessServer.games) {
+                for (GameSession game : ChessServer.games) {
+                    if (game.containsPlayer(this)) {
+                        game.sendLegalMoves(from, this);
+                        break;
+                    }
+                }
+            }
         } else if (message.startsWith("CHAT ")) {
             String chatMsg = message.substring(5);
             synchronized (ChessServer.games) {

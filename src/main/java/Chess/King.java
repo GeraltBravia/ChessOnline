@@ -79,8 +79,7 @@ public class King extends Piece {
             }
         }
 
-        // Cập nhật trạng thái nhập thành
-        this.setCastlingDone(true);
+        // Note: do not change castling state here; caller that performs the move should set it.
         return true;
     }
 }
