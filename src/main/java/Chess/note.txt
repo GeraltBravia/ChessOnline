@@ -1,0 +1,3 @@
+khi vào chế độ chơi nhanh sẽ tự động connect đến đối thủ. Nút connect bây giờ sẽ là nút ván mới. Nút có thể bấm bất cứ khi nào
+sửa nút đầu hàng.
+thêm nút thoát ván đấu(trở về menu)

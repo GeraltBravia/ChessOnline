@@ -1,11 +1,13 @@
 Chess\GameSession.class
-Chess\Rook.class
 Chess\Move.class
-Chess\Board.class
 Chess\ClientHandler.class
-Chess\Pawn.class
 Chess\Bishop.class
 Chess\Game.class
+Chess\Knight.class
+Chess\Piece.class
+Chess\Rook.class
+Chess\Board.class
+Chess\Pawn.class
 Chess\Queen.class
 Chess\Spot.class
 Chess\HumanPlayer.class
@@ -13,6 +15,4 @@ Chess\ChessClient.class
 Chess\GameStatus.class
 Chess\Player.class
 Chess\King.class
-Chess\Knight.class
 Chess\ChessServer.class
-Chess\Piece.class
