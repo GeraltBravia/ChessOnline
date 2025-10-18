@@ -7,7 +7,7 @@ package Chess;
 import java.io.IOException;
 import java.io.*;
 import java.net.*;
-// no util imports needed
+import java.util.Map;
 
 /**
  * ClientHandler handles a single connected client socket.
@@ -20,8 +20,6 @@ public class ClientHandler implements Runnable {
     private String playerId;
     private Player player;
     
-    
-
     public ClientHandler(Socket socket) {
         this.socket = socket;
         this.playerId = "Player_" + socket.getPort();
@@ -36,6 +34,10 @@ public class ClientHandler implements Runnable {
 
     public Player getPlayer() {
         return player;
+    }
+
+    public String getPlayerId() {
+        return playerId;
     }
 
     public void setPlayer(Player player) {
@@ -90,6 +92,33 @@ public class ClientHandler implements Runnable {
                 for (GameSession game : ChessServer.games) {
                     if (game.containsPlayer(this)) {
                         game.broadcastChat(this, chatMsg);
+                        break;
+                    }
+                }
+            }
+        } else if (message.equals("START") || message.equals("NEW_GAME")) {
+            synchronized (ChessServer.games) {
+                for (GameSession game : ChessServer.games) {
+                    if (game.containsPlayer(this)) {
+                        game.restartGame(this);
+                        break;
+                    }
+                }
+            }
+        } else if (message.equals("SURRENDER")) {
+            synchronized (ChessServer.games) {
+                for (GameSession game : ChessServer.games) {
+                    if (game.containsPlayer(this)) {
+                        game.handleSurrender(this);
+                        break;
+                    }
+                }
+            }
+        } else if (message.equals("UNDO")) {
+            synchronized (ChessServer.games) {
+                for (GameSession game : ChessServer.games) {
+                    if (game.containsPlayer(this)) {
+                        game.handleUndo(this);
                         break;
                     }
                 }

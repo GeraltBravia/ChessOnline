@@ -46,4 +46,8 @@ public class Move {
     public void setPieceKilled(Piece pieceKilled) {
         this.pieceKilled = pieceKilled;
     }
+
+    public Piece getPieceKilled() {
+        return pieceKilled;
+    }
 }
