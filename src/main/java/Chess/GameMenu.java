@@ -6,12 +6,11 @@ import java.awt.event.*;
 
 public class GameMenu extends JFrame {
     private JButton quickPlayBtn;
-    private JButton createRoomBtn;
     private JTextField hostField;
     private JTextField portField;
     
     public GameMenu() {
-        super("Chess Game Menu");
+        super("Cờ Vua Trực Tuyến - Menu Chính");
         initUI();
         setSize(400, 300);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -26,7 +25,7 @@ public class GameMenu extends JFrame {
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         
         // Tiêu đề
-        JLabel titleLabel = new JLabel("Chess Online");
+        JLabel titleLabel = new JLabel("Cờ Vua Trực Tuyến");
         titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
         titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         mainPanel.add(titleLabel);
@@ -39,61 +38,41 @@ public class GameMenu extends JFrame {
         
         hostField = new JTextField("localhost");
         portField = new JTextField("12345");
-        connectionPanel.add(new JLabel("Host:"));
+        connectionPanel.add(new JLabel("Máy chủ:"));
         connectionPanel.add(hostField);
-        connectionPanel.add(new JLabel("Port:"));
+        connectionPanel.add(new JLabel("Cổng:"));
         connectionPanel.add(portField);
         mainPanel.add(connectionPanel);
         mainPanel.add(Box.createRigidArea(new Dimension(0, 20)));
         
         // Nút Chơi Nhanh
-        quickPlayBtn = new JButton("Chơi Nhanh");
+        quickPlayBtn = new JButton("Bắt đầu chơi");
         quickPlayBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
         quickPlayBtn.setMaximumSize(new Dimension(200, 40));
-        quickPlayBtn.addActionListener(e -> quickPlay());
+        quickPlayBtn.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                quickPlay();
+            }
+        });
         mainPanel.add(quickPlayBtn);
-        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
-        
-        // Nút Tạo Phòng
-        createRoomBtn = new JButton("Tạo Phòng");
-        createRoomBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
-        createRoomBtn.setMaximumSize(new Dimension(200, 40));
-        createRoomBtn.addActionListener(e -> createRoom());
-        mainPanel.add(createRoomBtn);
         
         add(mainPanel, BorderLayout.CENTER);
     }
-    
+
     private void quickPlay() {
         String host = hostField.getText().trim();
         int port;
         try {
             port = Integer.parseInt(portField.getText().trim());
         } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, "Port không hợp lệ!");
+            JOptionPane.showMessageDialog(this, "Cổng không hợp lệ!");
             return;
         }
-        ChessClientSwing gameWindow = new ChessClientSwing();
+        ChessClientSwing gameWindow = new ChessClientSwing(this);
         gameWindow.setVisible(true);
-        this.dispose(); // Đóng cửa sổ menu
-    }
-    
-    private void createRoom() {
-        String host = hostField.getText().trim();
-        int port;
-        try {
-            port = Integer.parseInt(portField.getText().trim());
-        } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, "Port không hợp lệ!");
-            return;
-        }
-        String roomId = JOptionPane.showInputDialog(this, 
-            "Nhập mã phòng (để trống để tạo mã tự động):", 
-            "Tạo Phòng", 
-            JOptionPane.PLAIN_MESSAGE);
-        ChessClientSwing gameWindow = new ChessClientSwing();
-        gameWindow.setVisible(true);
-        this.dispose(); // Đóng cửa sổ menu
+        gameWindow.autoConnect(host, port);
+        this.setVisible(false);
     }
     
     public static void main(String[] args) {
