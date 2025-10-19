@@ -8,6 +8,7 @@ public class GameMenu extends JFrame {
     private JButton quickPlayBtn;
     private JTextField hostField;
     private JTextField portField;
+    private User currentUser = null;
     
     public GameMenu() {
         super("Cờ Vua Trực Tuyến - Menu Chính");
@@ -60,7 +61,26 @@ public class GameMenu extends JFrame {
         add(mainPanel, BorderLayout.CENTER);
     }
 
+    private boolean ensureLoggedIn() {
+        if (currentUser != null) return true;
+        LoginRegisterDialog dlg = new LoginRegisterDialog(this);
+        dlg.setVisible(true);
+        User u = dlg.getAuthenticatedUser();
+        if (u != null) {
+            currentUser = u;
+            setTitle("Cờ Vua Trực Tuyến - Người dùng: " + currentUser.getUsername());
+            return true;
+        }
+        int opt = JOptionPane.showConfirmDialog(this, "Bạn chưa đăng nhập. Tiếp tục với tư cách khách?", "Chưa đăng nhập", JOptionPane.YES_NO_OPTION);
+        if (opt == JOptionPane.YES_OPTION) {
+            currentUser = null; // guest
+            return true;
+        }
+        return false;
+    }
+
     private void quickPlay() {
+        if (!ensureLoggedIn()) return;
         String host = hostField.getText().trim();
         int port;
         try {
