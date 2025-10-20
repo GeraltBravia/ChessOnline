@@ -7,7 +7,6 @@ package Chess;
 import java.io.IOException;
 import java.io.*;
 import java.net.*;
-import java.util.Map;
 
 /**
  * ClientHandler handles a single connected client socket.
@@ -123,9 +122,82 @@ public class ClientHandler implements Runnable {
                     }
                 }
             }
+        } else if (message.equals("CREATE_ROOM")) {
+            handleCreateRoom();
+        } else if (message.startsWith("JOIN_ROOM ")) {
+            String roomCode = message.substring(10).trim();
+            handleJoinRoom(roomCode);
+        } else if (message.equals("QUICK_PLAY")) {
+            handleQuickPlay();
+        } else if (message.equals("CANCEL_QUICK_PLAY")) {
+            handleCancelQuickPlay();
         } else {
             sendMessage("INVALID_COMMAND");
         }
+    }
+    
+    private void handleCreateRoom() {
+        synchronized (ChessServer.rooms) {
+            // Tạo mã phòng ngẫu nhiên duy nhất
+            String roomCode;
+            do {
+                roomCode = ChessServer.generateRoomCode();
+            } while (ChessServer.rooms.containsKey(roomCode));
+            
+            // Tạo phòng mới
+            RoomInfo room = new RoomInfo(roomCode, this, "RANDOM");
+            ChessServer.rooms.put(roomCode, room);
+            
+            // Gửi mã phòng cho người tạo
+            sendMessage("ROOM_CREATED " + roomCode);
+            System.out.println(playerId + " created room: " + roomCode);
+        }
+    }
+    
+    private void handleJoinRoom(String roomCode) {
+        synchronized (ChessServer.rooms) {
+            RoomInfo room = ChessServer.rooms.get(roomCode);
+            
+            if (room == null) {
+                sendMessage("ROOM_NOT_FOUND");
+                System.out.println(playerId + " tried to join non-existent room: " + roomCode);
+                return;
+            }
+            
+            if (room.isFull()) {
+                sendMessage("ROOM_FULL");
+                System.out.println(playerId + " tried to join full room: " + roomCode);
+                return;
+            }
+            
+            // Thêm người chơi vào phòng
+            room.addPlayer(this);
+            sendMessage("ROOM_JOINED " + roomCode);
+            System.out.println(playerId + " joined room: " + roomCode);
+            
+            // Bắt đầu game
+            ClientHandler player1 = room.getHost();
+            ClientHandler player2 = room.getJoiner();
+            
+            GameSession game = new GameSession(player1, player2);
+            synchronized (ChessServer.games) {
+                ChessServer.games.add(game);
+            }
+            
+            // Xóa phòng khỏi danh sách
+            ChessServer.rooms.remove(roomCode);
+            
+            // Bắt đầu trận đấu
+            game.startGame();
+        }
+    }
+    
+    private void handleQuickPlay() {
+        ChessServer.joinQuickPlay(this);
+    }
+    
+    private void handleCancelQuickPlay() {
+        ChessServer.cancelQuickPlay(this);
     }
 
     private void closeConnection() {

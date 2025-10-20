@@ -16,7 +16,10 @@ public class ChessClientSwing extends JFrame {
     private JTextField hostField;
     private JTextField portField;
     private JButton connectBtn, undoBtn, surrenderBtn, newGameBtn, exitBtn;
+    private JButton createRoomBtn, joinRoomBtn;
     private JLabel statusLabel;
+    private JLabel roomCodeLabel;
+    private String currentRoomCode;
     private GameMenu parentMenu;
 
     private Socket socket;
@@ -70,8 +73,72 @@ public class ChessClientSwing extends JFrame {
     public void autoConnect(String host, int port) {
         hostField.setText(host);
         portField.setText(String.valueOf(port));
+        appendChat("Đang kết nối tới máy chủ " + host + ":" + port);
+        
+        // Kết nối sau khi UI đã sẵn sàng
+        SwingUtilities.invokeLater(() -> {
+            connectToServer();
+        });
+    }
+    
+    public void autoConnectAndQuickPlay(String host, int port) {
+        hostField.setText(host);
+        portField.setText(String.valueOf(port));
         connectToServer();
         appendChat("Đang kết nối tới máy chủ " + host + ":" + port);
+        
+        // Đợi một chút để kết nối hoàn tất, sau đó tự động tham gia quick play
+        SwingUtilities.invokeLater(() -> {
+            try {
+                Thread.sleep(500); // Đợi kết nối hoàn tất
+                if (socket != null && socket.isConnected() && out != null) {
+                    out.println("QUICK_PLAY");
+                    statusLabel.setText("Đang tìm đối thủ...");
+                    appendChat("Đang tìm đối thủ cho chế độ Chơi Nhanh...");
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+    
+    public void autoConnectAndCreateRoom(String host, int port) {
+        hostField.setText(host);
+        portField.setText(String.valueOf(port));
+        connectToServer();
+        appendChat("Đang kết nối tới máy chủ " + host + ":" + port);
+        
+        // Đợi một chút để kết nối hoàn tất, sau đó tự động tạo phòng
+        SwingUtilities.invokeLater(() -> {
+            try {
+                Thread.sleep(500); // Đợi kết nối hoàn tất
+                if (socket != null && socket.isConnected()) {
+                    createRoom();
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+    
+    public void autoConnectAndJoinRoom(String host, int port, String roomCode) {
+        hostField.setText(host);
+        portField.setText(String.valueOf(port));
+        connectToServer();
+        appendChat("Đang kết nối tới máy chủ " + host + ":" + port);
+        
+        // Đợi một chút để kết nối hoàn tất, sau đó tự động vào phòng
+        SwingUtilities.invokeLater(() -> {
+            try {
+                Thread.sleep(500); // Đợi kết nối hoàn tất
+                if (socket != null && socket.isConnected() && out != null) {
+                    out.println("JOIN_ROOM " + roomCode);
+                    statusLabel.setText("Đang vào phòng " + roomCode + "...");
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private void loadPieceIcons() {
@@ -187,37 +254,44 @@ public class ChessClientSwing extends JFrame {
 
         left.add(boardPanel, BorderLayout.CENTER);
 
-        JPanel ctrl = new JPanel(new GridLayout(5, 2, 4, 4));
+        JPanel ctrl = new JPanel(new GridLayout(7, 2, 4, 4));
         hostField = new JTextField("localhost");
         portField = new JTextField(String.valueOf(DEFAULT_PORT));
-        connectBtn = new JButton("Connect");
-        connectBtn.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                connectToServer();
-            }
-        });
-        undoBtn = new JButton("Undo");
-        undoBtn.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                sendUndoRequest();
-            }
-        });
-        statusLabel = new JLabel("Not connected");
-
+        
         ctrl.add(new JLabel("Host:"));
         ctrl.add(hostField);
         ctrl.add(new JLabel("Port:"));
         ctrl.add(portField);
+        
         connectBtn = new JButton("Kết nối");
         connectBtn.addActionListener(e -> connectToServer());
         ctrl.add(connectBtn);
+        
+        // Thêm label để hiển thị mã phòng
+        roomCodeLabel = new JLabel("");
+        roomCodeLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        roomCodeLabel.setForeground(new Color(0, 100, 0));
+        ctrl.add(roomCodeLabel);
+        
+        // Thêm nút tạo phòng
+        createRoomBtn = new JButton("Tạo phòng");
+        createRoomBtn.addActionListener(e -> createRoom());
+        createRoomBtn.setEnabled(false);
+        ctrl.add(createRoomBtn);
+        
+        // Thêm nút vào phòng
+        joinRoomBtn = new JButton("Vào phòng");
+        joinRoomBtn.addActionListener(e -> joinRoom());
+        joinRoomBtn.setEnabled(false);
+        ctrl.add(joinRoomBtn);
         
         undoBtn = new JButton("Đi lại");
         undoBtn.addActionListener(e -> sendUndoRequest());
         undoBtn.setEnabled(false);
         ctrl.add(undoBtn);
+        
+        statusLabel = new JLabel("Chưa kết nối");
+        ctrl.add(statusLabel);
         
         // Add New Game button
         newGameBtn = new JButton("Ván mới");
@@ -410,8 +484,14 @@ public class ChessClientSwing extends JFrame {
         // Update button states based on connection
         boolean isConnected = socket != null && socket.isConnected();
         newGameBtn.setEnabled(isConnected);
-        connectBtn.setEnabled(isConnected);
-        connectBtn.setText(isConnected ? "Ván mới" : "Kết nối");
+        connectBtn.setEnabled(!isConnected);
+        connectBtn.setText("Kết nối");
+        
+        // Reset room controls
+        createRoomBtn.setEnabled(isConnected);
+        joinRoomBtn.setEnabled(isConnected);
+        currentRoomCode = null;
+        roomCodeLabel.setText("");
         
         // Update connection fields
         hostField.setEnabled(!isConnected);
@@ -419,7 +499,7 @@ public class ChessClientSwing extends JFrame {
         
         // Update status
         if (isConnected) {
-            statusLabel.setText("Đang chờ trận đấu");
+            statusLabel.setText("Đã kết nối, chọn Tạo phòng hoặc Vào phòng");
         } else {
             statusLabel.setText("Chưa kết nối");
         }
@@ -513,13 +593,15 @@ public class ChessClientSwing extends JFrame {
             moveHistory.clear();
             selectedRow = -1;
             selectedCol = -1;
+            currentRoomCode = null;
             
             // Update UI elements
             hostField.setEnabled(false);
             portField.setEnabled(false);
-            connectBtn.setText("Ván mới");
-            connectBtn.setEnabled(false); // Will be enabled when game starts
-            statusLabel.setText("Đã kết nối, đang chờ đối thủ...");
+            connectBtn.setEnabled(false);
+            createRoomBtn.setEnabled(true);
+            joinRoomBtn.setEnabled(true);
+            statusLabel.setText("Đã kết nối, chọn Tạo phòng hoặc Vào phòng");
             
             // Start listening for server messages
             new Thread(this::serverReaderLoop).start();
@@ -533,6 +615,28 @@ public class ChessClientSwing extends JFrame {
             portField.setEnabled(true);
             connectBtn.setEnabled(true);
             connectBtn.setText("Kết nối");
+        }
+    }
+    
+    private void createRoom() {
+        if (socket != null && out != null) {
+            out.println("CREATE_ROOM");
+            statusLabel.setText("Đang tạo phòng...");
+            createRoomBtn.setEnabled(false);
+            joinRoomBtn.setEnabled(false);
+        }
+    }
+    
+    private void joinRoom() {
+        String roomCode = JOptionPane.showInputDialog(this, "Nhập mã phòng:", "Vào phòng", JOptionPane.PLAIN_MESSAGE);
+        if (roomCode != null && !roomCode.trim().isEmpty()) {
+            roomCode = roomCode.trim().toUpperCase();
+            if (socket != null && out != null) {
+                out.println("JOIN_ROOM " + roomCode);
+                statusLabel.setText("Đang vào phòng " + roomCode + "...");
+                createRoomBtn.setEnabled(false);
+                joinRoomBtn.setEnabled(false);
+            }
         }
     }
 
@@ -551,6 +655,58 @@ public class ChessClientSwing extends JFrame {
     }
 
     private void handleServerMessage(String msg) {
+        
+        // Xử lý tin nhắn về phòng
+        if (msg.startsWith("ROOM_CREATED ")) {
+            currentRoomCode = msg.substring(13).trim();
+            roomCodeLabel.setText("Mã phòng: " + currentRoomCode);
+            statusLabel.setText("Phòng đã tạo! Đang chờ đối thủ...");
+            appendChat("Phòng đã được tạo với mã: " + currentRoomCode);
+            appendChat("Chia sẻ mã này cho đối thủ của bạn!");
+            return;
+        }
+        
+        if (msg.equals("ROOM_NOT_FOUND")) {
+            JOptionPane.showMessageDialog(this, "Không tìm thấy phòng với mã này!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            statusLabel.setText("Phòng không tồn tại");
+            createRoomBtn.setEnabled(true);
+            joinRoomBtn.setEnabled(true);
+            return;
+        }
+        
+        if (msg.equals("ROOM_FULL")) {
+            JOptionPane.showMessageDialog(this, "Phòng đã đầy!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            statusLabel.setText("Phòng đã đầy");
+            createRoomBtn.setEnabled(true);
+            joinRoomBtn.setEnabled(true);
+            return;
+        }
+        
+        if (msg.startsWith("ROOM_JOINED ")) {
+            currentRoomCode = msg.substring(12).trim();
+            roomCodeLabel.setText("Mã phòng: " + currentRoomCode);
+            statusLabel.setText("Đã vào phòng " + currentRoomCode);
+            appendChat("Đã vào phòng: " + currentRoomCode);
+            return;
+        }
+        
+        // Xử lý tin nhắn Quick Play
+        if (msg.equals("WAITING_FOR_OPPONENT")) {
+            statusLabel.setText("Đang chờ đối thủ...");
+            appendChat("⏳ Đang tìm đối thủ...");
+            appendChat("Vui lòng chờ trong giây lát...");
+            createRoomBtn.setEnabled(false);
+            joinRoomBtn.setEnabled(false);
+            return;
+        }
+        
+        if (msg.equals("QUICK_PLAY_CANCELLED")) {
+            statusLabel.setText("Đã hủy tìm trận");
+            appendChat("❌ Đã hủy tìm trận");
+            createRoomBtn.setEnabled(true);
+            joinRoomBtn.setEnabled(true);
+            return;
+        }
         
         // Xử lý tin nhắn START trước tiên vì nó thiết lập trạng thái ban đầu của game
         if (msg.startsWith("START")) {
