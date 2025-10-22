@@ -7,8 +7,8 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Properties;
 import java.sql.*;
+import java.util.Properties;
 
 public class AuthService {
     private String jdbcUrl;
@@ -109,5 +109,100 @@ public class AuthService {
             e.printStackTrace();
             return false;
         }
+    }
+
+    /**
+     * Lưu kết quả game vào database và cập nhật Elo (chỉ cho Quick Play)
+     * @param player1Id ID người chơi 1 (trắng)
+     * @param player2Id ID người chơi 2 (đen)
+     * @param winnerId ID người thắng (null nếu hòa)
+     * @param isQuickPlay true nếu là chế độ Quick Play
+     * @return true nếu lưu thành công
+     */
+    public boolean saveGameResult(int player1Id, int player2Id, Integer winnerId, boolean isQuickPlay) {
+        if (!isQuickPlay) {
+            return true; // Không cập nhật Elo cho chế độ tạo phòng thủ công
+        }
+
+        System.out.println("DEBUG saveGameResult: player1Id=" + player1Id + ", player2Id=" + player2Id + ", winnerId=" + winnerId);
+
+        try (Connection c = getConn()) {
+            // Lấy Elo hiện tại của cả hai người chơi
+            String getEloSql = "SELECT id, elo_rating FROM users WHERE id IN (?, ?)";
+            int player1Elo = 1200, player2Elo = 1200;
+
+            try (PreparedStatement ps = c.prepareStatement(getEloSql)) {
+                ps.setInt(1, player1Id);
+                ps.setInt(2, player2Id);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        if (rs.getInt("id") == player1Id) {
+                            player1Elo = rs.getInt("elo_rating");
+                        } else if (rs.getInt("id") == player2Id) {
+                            player2Elo = rs.getInt("elo_rating");
+                        }
+                    }
+                }
+            }
+
+            System.out.println("DEBUG: player1Elo=" + player1Elo + ", player2Elo=" + player2Elo);
+
+            // Tính toán thay đổi Elo
+            int[] eloChanges;
+            if (winnerId == null) {
+                // Hòa
+                eloChanges = EloCalculator.calculateDrawEloChange(player1Elo, player2Elo);
+                System.out.println("DEBUG: Draw - eloChanges=" + eloChanges[0] + ", " + eloChanges[1]);
+            } else if (winnerId == player1Id) {
+                // Player 1 thắng
+                eloChanges = EloCalculator.calculateEloChange(player1Elo, player2Elo);
+                System.out.println("DEBUG: Player1 wins - eloChanges=" + eloChanges[0] + ", " + eloChanges[1]);
+            } else {
+                // Player 2 thắng
+                int[] temp = EloCalculator.calculateEloChange(player2Elo, player1Elo);
+                eloChanges = new int[]{temp[1], temp[0]}; // Đảo ngược thứ tự
+                System.out.println("DEBUG: Player2 wins - eloChanges=" + eloChanges[0] + ", " + eloChanges[1]);
+            }
+
+            // Lưu kết quả game vào database
+            String insertGameSql = "INSERT INTO games (player1_id, player2_id, winner_id, elo_change_player1, elo_change_player2, end_time) VALUES (?, ?, ?, ?, ?, NOW())";
+            try (PreparedStatement ps = c.prepareStatement(insertGameSql)) {
+                ps.setInt(1, player1Id);
+                ps.setInt(2, player2Id);
+                if (winnerId != null) {
+                    ps.setInt(3, winnerId);
+                } else {
+                    ps.setNull(3, Types.INTEGER);
+                }
+                ps.setInt(4, eloChanges[0]);
+                ps.setInt(5, eloChanges[1]);
+                ps.executeUpdate();
+            }
+
+            return true;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Lấy điểm Elo hiện tại của user
+     * @param userId ID của user
+     * @return Điểm Elo hoặc 1200 nếu không tìm thấy
+     */
+    public int getCurrentElo(int userId) {
+        String sql = "SELECT elo_rating FROM users WHERE id = ?";
+        try (Connection c = getConn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("elo_rating");
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 1200; // Default Elo
     }
 }

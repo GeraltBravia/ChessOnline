@@ -17,6 +17,8 @@ public class GameMenu extends JFrame {
         setLocationRelativeTo(null);
     }
     
+    private JLabel userInfoLabel; // Thêm field để có thể cập nhật
+    
     public GameMenu(User user) {
         this();
         this.currentUser = user;
@@ -26,6 +28,14 @@ public class GameMenu extends JFrame {
             setTitle("Cờ Vua Trực Tuyến - Khách");
         }
         initUI();
+        
+        // Thêm listener để refresh Elo khi window được show lại
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowActivated(WindowEvent e) {
+                refreshUserInfo();
+            }
+        });
     }
     
     private void initUI() {
@@ -40,6 +50,20 @@ public class GameMenu extends JFrame {
         titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
         titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         mainPanel.add(titleLabel);
+        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        
+        // Hiển thị thông tin người dùng và Elo
+        if (currentUser != null) {
+            userInfoLabel = new JLabel("Người dùng: " + currentUser.getUsername() + " | Elo: " + currentUser.getEloRating());
+            userInfoLabel.setFont(new Font("Arial", Font.BOLD, 14));
+            userInfoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            mainPanel.add(userInfoLabel);
+        } else {
+            userInfoLabel = new JLabel("Chế độ khách - Không tính Elo");
+            userInfoLabel.setFont(new Font("Arial", Font.ITALIC, 12));
+            userInfoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            mainPanel.add(userInfoLabel);
+        }
         mainPanel.add(Box.createRigidArea(new Dimension(0, 20)));
         
         // Panel cho host và port
@@ -157,6 +181,33 @@ public class GameMenu extends JFrame {
         
         // Kết nối và tự động tham gia Quick Play (tự động ghép cặp)
         gameWindow.autoConnectAndQuickPlay(host, port);
+    }
+    
+    public User getCurrentUser() {
+        return currentUser;
+    }
+    
+    /**
+     * Refresh thông tin người dùng và Elo từ database
+     */
+    public void refreshUserInfo() {
+        if (currentUser != null && userInfoLabel != null) {
+            try {
+                // Lấy Elo mới từ database
+                AuthService authService = new AuthService();
+                int currentElo = authService.getCurrentElo(currentUser.getId());
+                
+                // Cập nhật Elo trong User object
+                currentUser = new User(currentUser.getId(), currentUser.getUsername(), currentUser.getEmail(), currentElo);
+                
+                // Cập nhật UI
+                userInfoLabel.setText("Người dùng: " + currentUser.getUsername() + " | Elo: " + currentElo);
+                
+                System.out.println("Refreshed user info: " + currentUser.getUsername() + " - Elo: " + currentElo);
+            } catch (Exception e) {
+                System.out.println("Error refreshing user info: " + e.getMessage());
+            }
+        }
     }
     
     public static void main(String[] args) {

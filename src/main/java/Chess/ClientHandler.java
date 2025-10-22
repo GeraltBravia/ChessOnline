@@ -18,6 +18,7 @@ public class ClientHandler implements Runnable {
     private BufferedReader in;
     private String playerId;
     private Player player;
+    private User user; // Thêm trường user để lưu thông tin người dùng
     
     public ClientHandler(Socket socket) {
         this.socket = socket;
@@ -41,6 +42,14 @@ public class ClientHandler implements Runnable {
 
     public void setPlayer(Player player) {
         this.player = player;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 
     @Override
@@ -122,6 +131,20 @@ public class ClientHandler implements Runnable {
                     }
                 }
             }
+        } else if (message.startsWith("SET_USER ")) {
+            String[] parts = message.substring(9).split(" ");
+            if (parts.length >= 2) {
+                try {
+                    int userId = Integer.parseInt(parts[0]);
+                    String username = parts[1];
+                    // Tạo User object với Elo mặc định, sẽ được cập nhật từ database sau
+                    User user = new User(userId, username, "", 1200);
+                    setUser(user);
+                    System.out.println("User set for " + playerId + ": " + username + " (ID: " + userId + ")");
+                } catch (NumberFormatException e) {
+                    System.out.println("Invalid SET_USER message: " + message);
+                }
+            }
         } else if (message.equals("CREATE_ROOM")) {
             handleCreateRoom();
         } else if (message.startsWith("JOIN_ROOM ")) {
@@ -179,7 +202,7 @@ public class ClientHandler implements Runnable {
             ClientHandler player1 = room.getHost();
             ClientHandler player2 = room.getJoiner();
             
-            GameSession game = new GameSession(player1, player2);
+            GameSession game = new GameSession(player1, player2, false); // false = không phải Quick Play
             synchronized (ChessServer.games) {
                 ChessServer.games.add(game);
             }

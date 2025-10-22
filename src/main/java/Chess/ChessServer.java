@@ -44,13 +44,25 @@ public class ChessServer {
                 System.out.println("Player 2 (BLACK): " + player.getPlayerId());
                 
                 // Tạo game session
-                GameSession game = new GameSession(opponent, player);
+                GameSession game = new GameSession(opponent, player, true); // true = Quick Play
                 synchronized (games) {
                     games.add(game);
                 }
                 
-                // Bắt đầu game
+                // Bắt đầu game trước
                 game.startGame();
+                
+                // Sau đó gửi thông tin Elo
+                AuthService authService = new AuthService();
+                int opponentElo = authService.getCurrentElo(opponent.getUser() != null ? opponent.getUser().getId() : 0);
+                int playerElo = authService.getCurrentElo(player.getUser() != null ? player.getUser().getId() : 0);
+                
+                System.out.println("DEBUG: opponent.getUser() = " + opponent.getUser());
+                System.out.println("DEBUG: player.getUser() = " + player.getUser());
+                System.out.println("DEBUG: opponentElo = " + opponentElo + ", playerElo = " + playerElo);
+                
+                opponent.sendMessage("OPPONENT_ELO " + playerElo);
+                player.sendMessage("OPPONENT_ELO " + opponentElo);
             }
         }
     }

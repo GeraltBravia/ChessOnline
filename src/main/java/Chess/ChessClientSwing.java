@@ -19,8 +19,10 @@ public class ChessClientSwing extends JFrame {
     private JButton createRoomBtn, joinRoomBtn;
     private JLabel statusLabel;
     private JLabel roomCodeLabel;
+    private JLabel opponentEloLabel; // Hiển thị Elo của đối thủ
     private String currentRoomCode;
     private GameMenu parentMenu;
+    private boolean isQuickPlayMode = false; // Theo dõi chế độ chơi nhanh
 
     private Socket socket;
     private PrintWriter out;
@@ -59,7 +61,9 @@ public class ChessClientSwing extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                // Refresh Elo information in parent menu before showing it
                 if (parentMenu != null) {
+                    parentMenu.refreshUserInfo();
                     parentMenu.setVisible(true);
                 }
             }
@@ -82,6 +86,7 @@ public class ChessClientSwing extends JFrame {
     }
     
     public void autoConnectAndQuickPlay(String host, int port) {
+        isQuickPlayMode = true; // Đánh dấu đang chơi chế độ Quick Play
         hostField.setText(host);
         portField.setText(String.valueOf(port));
         connectToServer();
@@ -92,6 +97,11 @@ public class ChessClientSwing extends JFrame {
             try {
                 Thread.sleep(500); // Đợi kết nối hoàn tất
                 if (socket != null && socket.isConnected() && out != null) {
+                    // Gửi thông tin user trước khi tham gia quick play
+                    if (parentMenu != null && parentMenu.getCurrentUser() != null) {
+                        User currentUser = parentMenu.getCurrentUser();
+                        out.println("SET_USER " + currentUser.getId() + " " + currentUser.getUsername());
+                    }
                     out.println("QUICK_PLAY");
                     statusLabel.setText("Đang tìm đối thủ...");
                     appendChat("Đang tìm đối thủ cho chế độ Chơi Nhanh...");
@@ -293,6 +303,11 @@ public class ChessClientSwing extends JFrame {
         statusLabel = new JLabel("Chưa kết nối");
         ctrl.add(statusLabel);
         
+        // Thêm label hiển thị Elo của đối thủ
+        opponentEloLabel = new JLabel("Đối thủ: Chưa xác định");
+        opponentEloLabel.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 12));
+        ctrl.add(opponentEloLabel);
+        
         // Add New Game button
         newGameBtn = new JButton("Ván mới");
         newGameBtn.addActionListener(e -> requestNewGame());
@@ -464,7 +479,7 @@ public class ChessClientSwing extends JFrame {
     }
 
     private void resetGame() {
-        // Reset board state
+        // Reset game state
         initBoardState();
         
         // Reset UI state
@@ -476,6 +491,9 @@ public class ChessClientSwing extends JFrame {
         
         // Re-render the board
         renderBoard();
+        
+        // Reset game mode
+        isQuickPlayMode = false; // Reset về chế độ bình thường
         
         // Enable/disable controls appropriately
         surrenderBtn.setEnabled(false);
@@ -492,6 +510,7 @@ public class ChessClientSwing extends JFrame {
         joinRoomBtn.setEnabled(isConnected);
         currentRoomCode = null;
         roomCodeLabel.setText("");
+        opponentEloLabel.setText("Đối thủ: Chưa xác định");
         
         // Update connection fields
         hostField.setEnabled(!isConnected);
@@ -512,6 +531,35 @@ public class ChessClientSwing extends JFrame {
             JOptionPane.showMessageDialog(this, "Bạn đã thua!", "Game Over", JOptionPane.INFORMATION_MESSAGE);
         }
         resetGame();
+    }
+
+    /**
+     * Xử lý kết thúc game - tự động quay về menu nếu là Quick Play
+     */
+    private void handleGameEnd(boolean won) {
+        if (isQuickPlayMode) {
+            // Chế độ Quick Play: tự động quay về menu sau 2 giây
+            String message = won ? "Bạn đã chiến thắng!" : "Bạn đã thua!";
+            appendChat("🎯 " + message);
+            
+            // Hiển thị thông báo ngắn
+            JOptionPane.showMessageDialog(this, message + "\n\nTự động quay về menu chính...", 
+                                        "Game Over", JOptionPane.INFORMATION_MESSAGE);
+            
+            // Tự động đóng cửa sổ và quay về menu
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    Thread.sleep(1000); // Đợi 1 giây để user thấy thông báo
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                // Đóng cửa sổ game - window listener sẽ tự động refresh Elo và show menu
+                dispose();
+            });
+        } else {
+            // Chế độ phòng: hiển thị dialog như bình thường
+            showGameOver(won);
+        }
     }
 
     private void applyMoveToLocalBoard(String moveStr) {
@@ -708,6 +756,20 @@ public class ChessClientSwing extends JFrame {
             return;
         }
         
+        if (msg.startsWith("OPPONENT_ELO ")) {
+            String eloStr = msg.substring(13).trim();
+            System.out.println("DEBUG: Received OPPONENT_ELO: " + eloStr);
+            try {
+                int opponentElo = Integer.parseInt(eloStr);
+                opponentEloLabel.setText("Đối thủ: " + opponentElo + " Elo");
+                System.out.println("DEBUG: Set opponentEloLabel to: " + opponentElo + " Elo");
+            } catch (NumberFormatException e) {
+                opponentEloLabel.setText("Đối thủ: Chưa xác định");
+                System.out.println("DEBUG: Failed to parse Elo: " + eloStr);
+            }
+            return;
+        }
+        
         // Xử lý tin nhắn START trước tiên vì nó thiết lập trạng thái ban đầu của game
         if (msg.startsWith("START")) {
             String color = msg.substring(5).trim(); // Lấy phần "BLACK" hoặc "WHITE" từ tin nhắn
@@ -829,7 +891,7 @@ public class ChessClientSwing extends JFrame {
                 if (capturedPiece != null && capturedPiece.endsWith("k")) {
                     boolean iWon = (capturedPiece.startsWith("b") && isWhite) || 
                                  (capturedPiece.startsWith("w") && !isWhite);
-                    showGameOver(iWon);
+                    handleGameEnd(iWon);
                     return;
                 }
             }
@@ -851,7 +913,11 @@ public class ChessClientSwing extends JFrame {
         } else if (msg.equals("INVALID_MOVE_NOT_YOUR_PIECE")) {
             JOptionPane.showMessageDialog(this, "❌ Không thể di chuyển quân của đối thủ!");
         } else if (msg.equals("OPPONENT_SURRENDERED")) {
-            showGameOver(true); // Show win message for the remaining player
+            handleGameEnd(true); // Show win message for the remaining player
+        } else if (msg.startsWith("GAME_OVER ")) {
+            String result = msg.substring(10).trim();
+            boolean won = result.equals("WHITE_WIN") ? isWhite : !isWhite;
+            handleGameEnd(won);
         }
     }
 

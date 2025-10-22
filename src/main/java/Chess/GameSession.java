@@ -11,18 +11,24 @@ public class GameSession {
     private boolean isPlayer1Turn;
     private Player whitePlayer;
     private Player blackPlayer;
+    private boolean isQuickPlay; // true nếu là chế độ Quick Play (cập nhật Elo)
     
     // Lưu trữ lịch sử nước đi
     private List<Move> moveHistory;
     private List<Piece> capturedPieces;
 
     public GameSession(ClientHandler whitePlayer, ClientHandler blackPlayer) {
+        this(whitePlayer, blackPlayer, false);
+    }
+
+    public GameSession(ClientHandler whitePlayer, ClientHandler blackPlayer, boolean isQuickPlay) {
         this.player1 = whitePlayer;
         this.player2 = blackPlayer;
         this.board = new Board();
         this.isPlayer1Turn = true; // White player (player1) goes first
         this.whitePlayer = new HumanPlayer(true);
         this.blackPlayer = new HumanPlayer(false);
+        this.isQuickPlay = isQuickPlay;
         whitePlayer.setPlayer(this.whitePlayer);
         blackPlayer.setPlayer(this.blackPlayer);
         this.moveHistory = new ArrayList<>();
@@ -133,6 +139,9 @@ public class GameSession {
         winner.sendMessage("OPPONENT_SURRENDERED");
         surrenderingPlayer.sendMessage("GAME_OVER " + (winner == player1 ? "WHITE_WIN" : "BLACK_WIN"));
         winner.sendMessage("GAME_OVER " + (winner == player1 ? "WHITE_WIN" : "BLACK_WIN"));
+
+        // Lưu kết quả game
+        endGame(winner == player1 ? player1 : player2, null);
     }
 
     public void processMove(String moveStr, ClientHandler sender) {
@@ -220,6 +229,9 @@ public class GameSession {
                 String winner = currentPlayer.isWhiteSide() ? "WHITE_WIN" : "BLACK_WIN";
                 player1.sendMessage("GAME_OVER " + winner);
                 player2.sendMessage("GAME_OVER " + winner);
+
+                // Lưu kết quả game - sender là người vừa thắng
+                endGame(sender, null);
             }
 
         } catch (IllegalArgumentException e) {
@@ -270,6 +282,48 @@ public class GameSession {
             requester.sendMessage("LEGAL_MOVES " + sb.toString());
         } catch (IllegalArgumentException e) {
             requester.sendMessage("LEGAL_MOVES ");
+        }
+    }
+
+    /**
+     * Xử lý kết thúc game và lưu kết quả vào database (chỉ cho Quick Play)
+     * @param winner Người thắng (null nếu hòa)
+     * @param draw true nếu hòa
+     */
+    private void endGame(ClientHandler winner, Boolean draw) {
+        if (!isQuickPlay) {
+            return; // Không lưu kết quả cho chế độ tạo phòng thủ công
+        }
+
+        try {
+            // Lấy User ID từ ClientHandler (cần thêm phương thức getUserId vào ClientHandler)
+            Integer winnerId = null;
+            if (winner != null && winner.getUser() != null) {
+                winnerId = winner.getUser().getId();
+            }
+
+            Integer player1Id = (player1.getUser() != null) ? player1.getUser().getId() : null;
+            Integer player2Id = (player2.getUser() != null) ? player2.getUser().getId() : null;
+
+            System.out.println("DEBUG endGame: winner=" + (winner != null ? winner.getPlayerId() : "null") + 
+                             ", winnerId=" + winnerId + ", player1Id=" + player1Id + ", player2Id=" + player2Id);
+            System.out.println("DEBUG: player1 is WHITE, player2 is BLACK");
+            System.out.println("DEBUG: winner should be the sender who made the winning move");
+
+            // Chỉ lưu nếu cả hai người chơi đều có tài khoản
+            if (player1Id != null && player2Id != null) {
+                AuthService authService = new AuthService();
+                boolean success = authService.saveGameResult(player1Id, player2Id, winnerId, isQuickPlay);
+                if (success) {
+                    System.out.println("Game result saved to database for Quick Play match");
+                } else {
+                    System.out.println("Failed to save game result to database");
+                }
+            } else {
+                System.out.println("DEBUG: Cannot save game result - one or both players are guests");
+            }
+        } catch (Exception e) {
+            System.out.println("Error saving game result: " + e.getMessage());
         }
     }
 

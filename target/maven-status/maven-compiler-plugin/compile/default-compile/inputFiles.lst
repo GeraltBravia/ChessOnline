@@ -6,6 +6,7 @@ D:\LTM\ChessOnline\src\main\java\Chess\ChessClientSwing.java
 D:\LTM\ChessOnline\src\main\java\Chess\ChessServer.java
 D:\LTM\ChessOnline\src\main\java\Chess\ClientHandler.java
 D:\LTM\ChessOnline\src\main\java\Chess\DbCheck.java
+D:\LTM\ChessOnline\src\main\java\Chess\EloCalculator.java
 D:\LTM\ChessOnline\src\main\java\Chess\Game.java
 D:\LTM\ChessOnline\src\main\java\Chess\GameMenu.java
 D:\LTM\ChessOnline\src\main\java\Chess\GameSession.java
