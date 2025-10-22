@@ -97,6 +97,18 @@ public class ChessClientSwing extends JFrame {
             try {
                 Thread.sleep(500); // Đợi kết nối hoàn tất
                 if (socket != null && socket.isConnected() && out != null) {
+                    // Ẩn các nút không cần thiết trong chế độ Quick Play
+                    createRoomBtn.setVisible(false);
+                    joinRoomBtn.setVisible(false);
+                    newGameBtn.setVisible(false);
+                    connectBtn.setVisible(false);
+                    hostField.setVisible(false);
+                    portField.setVisible(false);
+                    
+                    // Chỉ hiển thị nút Đầu hàng và Đi lại
+                    surrenderBtn.setVisible(true);
+                    undoBtn.setVisible(true);
+                    
                     // Gửi thông tin user trước khi tham gia quick play
                     if (parentMenu != null && parentMenu.getCurrentUser() != null) {
                         User currentUser = parentMenu.getCurrentUser();
@@ -525,12 +537,26 @@ public class ChessClientSwing extends JFrame {
     }
 
     private void showGameOver(boolean won) {
-        if (won) {
-            JOptionPane.showMessageDialog(this, "Bạn đã chiến thắng!", "Game Over", JOptionPane.INFORMATION_MESSAGE);
-        } else {
-            JOptionPane.showMessageDialog(this, "Bạn đã thua!", "Game Over", JOptionPane.INFORMATION_MESSAGE);
-        }
-        resetGame();
+        String message = won ? "Bạn đã chiến thắng!" : "Bạn đã thua!";
+        JOptionPane.showMessageDialog(this, message + "\n\nTự động quay về menu chính...", 
+                                    "Game Over", JOptionPane.INFORMATION_MESSAGE);
+        
+        // Tự động đóng cửa sổ và quay về menu
+        SwingUtilities.invokeLater(() -> {
+            try {
+                Thread.sleep(1000); // Đợi 1 giây để user thấy thông báo
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            
+            // Đóng cửa sổ game - window listener sẽ tự động refresh Elo và show menu
+            dispose();
+            if (parentMenu != null) {
+                parentMenu.refreshUserInfo();
+                parentMenu.setVisible(true);
+            }
+        });
+
     }
 
     /**
@@ -553,6 +579,14 @@ public class ChessClientSwing extends JFrame {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+                // Đảm bảo các nút vẫn ẩn cho đến khi cửa sổ đóng
+                createRoomBtn.setVisible(false);
+                joinRoomBtn.setVisible(false);
+                newGameBtn.setVisible(false);
+                connectBtn.setVisible(false);
+                hostField.setVisible(false);
+                portField.setVisible(false);
+                
                 // Đóng cửa sổ game - window listener sẽ tự động refresh Elo và show menu
                 dispose();
             });
@@ -644,17 +678,42 @@ public class ChessClientSwing extends JFrame {
             currentRoomCode = null;
             
             // Update UI elements
-            hostField.setEnabled(false);
-            portField.setEnabled(false);
-            connectBtn.setEnabled(false);
+        hostField.setEnabled(false);
+        portField.setEnabled(false);
+        connectBtn.setEnabled(false);
+        
+        if (!isQuickPlayMode) {
             createRoomBtn.setEnabled(true);
             joinRoomBtn.setEnabled(true);
+            createRoomBtn.setVisible(true);
+            joinRoomBtn.setVisible(true);
+            newGameBtn.setVisible(true);
+            connectBtn.setVisible(true);
+            hostField.setVisible(true);
+            portField.setVisible(true);
             statusLabel.setText("Đã kết nối, chọn Tạo phòng hoặc Vào phòng");
-            
-            // Start listening for server messages
-            new Thread(this::serverReaderLoop).start();
-            
-        } catch (IOException e) {
+        } else {
+            // Ẩn các nút không cần thiết trong chế độ Quick Play
+            createRoomBtn.setVisible(false);
+            joinRoomBtn.setVisible(false);
+            newGameBtn.setVisible(false);
+            connectBtn.setVisible(false);
+            hostField.setVisible(false);
+            portField.setVisible(false);
+        }
+        
+        // Nếu là Quick Play, luôn ẩn các nút không cần thiết
+        if (isQuickPlayMode) {
+            createRoomBtn.setVisible(false);
+            joinRoomBtn.setVisible(false);
+            newGameBtn.setVisible(false);
+            connectBtn.setVisible(false);
+            hostField.setVisible(false);
+            portField.setVisible(false);
+        }
+        
+        // Start listening for server messages
+        new Thread(this::serverReaderLoop).start();        } catch (IOException e) {
             appendChat("Kết nối thất bại: " + e.getMessage());
             statusLabel.setText("Kết nối thất bại");
             
@@ -792,12 +851,34 @@ public class ChessClientSwing extends JFrame {
                 return;
             }
             
-            // Cập nhật giao diện
+            // Cập nhật giao diện cho các nút điều khiển game
             surrenderBtn.setEnabled(true);
             undoBtn.setEnabled(true);
-            newGameBtn.setEnabled(true);
-            connectBtn.setText("Ván mới");
-            connectBtn.setEnabled(false);
+            surrenderBtn.setVisible(true);
+            undoBtn.setVisible(true);
+            
+            // Kiểm tra chế độ chơi để hiển thị/ẩn các nút phù hợp
+            if (!isQuickPlayMode) {
+                // Chế độ thường - hiển thị đầy đủ các nút
+                newGameBtn.setEnabled(false);
+                connectBtn.setText("Ván mới");
+                connectBtn.setEnabled(false);
+                
+                newGameBtn.setVisible(false);
+                createRoomBtn.setVisible(false);
+                joinRoomBtn.setVisible(false);
+                connectBtn.setVisible(true);
+                hostField.setVisible(false);
+                portField.setVisible(false);
+            } else {
+                // Chế độ Quick Play - ẩn các nút không cần thiết
+                newGameBtn.setVisible(false);
+                createRoomBtn.setVisible(false);
+                joinRoomBtn.setVisible(false);
+                connectBtn.setVisible(false);
+                hostField.setVisible(false);
+                portField.setVisible(false);
+            }
             
             // Cập nhật trạng thái hiển thị
             updateStatusLabel();

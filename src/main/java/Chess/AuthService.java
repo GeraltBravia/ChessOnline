@@ -52,6 +52,12 @@ public class AuthService {
         return DriverManager.getConnection(jdbcUrl, dbUser, dbPass);
     }
 
+    private int calculateEloChange(int winnerElo, int loserElo, boolean isQuickPlay) {
+        double expectedScore = 1.0 / (1.0 + Math.pow(10.0, (loserElo - winnerElo) / 400.0));
+        int k = isQuickPlay ? 32 : 16; // K-factor: higher for quick play
+        return (int) Math.round(k * (1.0 - expectedScore));
+    }
+
     // Returns User if success, null otherwise
     public User login(String usernameOrEmail, String password) throws SQLException {
         String sql = "SELECT id, username, email, password_hash, elo_rating FROM users WHERE username = ? OR email = ? LIMIT 1";
@@ -148,20 +154,46 @@ public class AuthService {
             System.out.println("DEBUG: player1Elo=" + player1Elo + ", player2Elo=" + player2Elo);
 
             // Tính toán thay đổi Elo
-            int[] eloChanges;
+            int[] eloChanges = new int[2];
+            
             if (winnerId == null) {
-                // Hòa
-                eloChanges = EloCalculator.calculateDrawEloChange(player1Elo, player2Elo);
+                // Trường hợp hòa - điểm thay đổi ít hơn
+                int eloChange = calculateEloChange(player1Elo, player2Elo, true) / 2;
+                eloChanges[0] = eloChange;
+                eloChanges[1] = -eloChange;
                 System.out.println("DEBUG: Draw - eloChanges=" + eloChanges[0] + ", " + eloChanges[1]);
-            } else if (winnerId == player1Id) {
-                // Player 1 thắng
-                eloChanges = EloCalculator.calculateEloChange(player1Elo, player2Elo);
-                System.out.println("DEBUG: Player1 wins - eloChanges=" + eloChanges[0] + ", " + eloChanges[1]);
             } else {
-                // Player 2 thắng
-                int[] temp = EloCalculator.calculateEloChange(player2Elo, player1Elo);
-                eloChanges = new int[]{temp[1], temp[0]}; // Đảo ngược thứ tự
-                System.out.println("DEBUG: Player2 wins - eloChanges=" + eloChanges[0] + ", " + eloChanges[1]);
+                // Xác định người thắng/thua và tính điểm
+                boolean isPlayer1Winner = winnerId == player1Id;
+                int winnerElo = isPlayer1Winner ? player1Elo : player2Elo;
+                int loserElo = isPlayer1Winner ? player2Elo : player1Elo;
+                
+                int eloChange = calculateEloChange(winnerElo, loserElo, true);
+                
+                if (isPlayer1Winner) {
+                    eloChanges[0] = eloChange;
+                    eloChanges[1] = -eloChange;
+                    System.out.println("DEBUG: Player1 wins - eloChanges=" + eloChanges[0] + ", " + eloChanges[1]);
+                } else {
+                    eloChanges[0] = -eloChange;
+                    eloChanges[1] = eloChange;
+                    System.out.println("DEBUG: Player2 wins - eloChanges=" + eloChanges[0] + ", " + eloChanges[1]);
+                }
+            }
+
+            // Cập nhật điểm Elo mới cho cả hai người chơi
+            String updateEloSql = "UPDATE users SET elo_rating = CASE " +
+                                "WHEN id = ? THEN elo_rating + ? " +
+                                "WHEN id = ? THEN elo_rating + ? " +
+                                "END WHERE id IN (?, ?)";
+            try (PreparedStatement ps = c.prepareStatement(updateEloSql)) {
+                ps.setInt(1, player1Id);
+                ps.setInt(2, eloChanges[0]);
+                ps.setInt(3, player2Id);
+                ps.setInt(4, eloChanges[1]);
+                ps.setInt(5, player1Id);
+                ps.setInt(6, player2Id);
+                ps.executeUpdate();
             }
 
             // Lưu kết quả game vào database
@@ -178,6 +210,10 @@ public class AuthService {
                 ps.setInt(5, eloChanges[1]);
                 ps.executeUpdate();
             }
+
+            // In ra log để debug
+            System.out.println("DEBUG: Updated Elo - player1: " + (player1Elo + eloChanges[0]) + 
+                             ", player2: " + (player2Elo + eloChanges[1]));
 
             return true;
         } catch (SQLException e) {

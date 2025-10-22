@@ -140,8 +140,8 @@ public class GameSession {
         surrenderingPlayer.sendMessage("GAME_OVER " + (winner == player1 ? "WHITE_WIN" : "BLACK_WIN"));
         winner.sendMessage("GAME_OVER " + (winner == player1 ? "WHITE_WIN" : "BLACK_WIN"));
 
-        // Lưu kết quả game
-        endGame(winner == player1 ? player1 : player2, null);
+        // Lưu kết quả game khi đầu hàng (không phải hòa)
+        endGame(winner == player1 ? player1 : player2, false);
     }
 
     public void processMove(String moveStr, ClientHandler sender) {
@@ -231,7 +231,7 @@ public class GameSession {
                 player2.sendMessage("GAME_OVER " + winner);
 
                 // Lưu kết quả game - sender là người vừa thắng
-                endGame(sender, null);
+                endGame(sender, false);
             }
 
         } catch (IllegalArgumentException e) {
@@ -290,40 +290,63 @@ public class GameSession {
      * @param winner Người thắng (null nếu hòa)
      * @param draw true nếu hòa
      */
-    private void endGame(ClientHandler winner, Boolean draw) {
+    private void endGame(ClientHandler winner, boolean draw) {
         if (!isQuickPlay) {
             return; // Không lưu kết quả cho chế độ tạo phòng thủ công
         }
 
         try {
-            // Lấy User ID từ ClientHandler (cần thêm phương thức getUserId vào ClientHandler)
-            Integer winnerId = null;
-            if (winner != null && winner.getUser() != null) {
-                winnerId = winner.getUser().getId();
-            }
+            // Lấy User ID của cả hai người chơi
+            User winner_user = draw ? null : (winner != null ? winner.getUser() : null);
+            User player1_user = player1.getUser();
+            User player2_user = player2.getUser();
 
-            Integer player1Id = (player1.getUser() != null) ? player1.getUser().getId() : null;
-            Integer player2Id = (player2.getUser() != null) ? player2.getUser().getId() : null;
+            // ID người thắng sẽ là null nếu hòa
+            Integer winnerId = draw ? null : (winner_user != null ? winner_user.getId() : null);
+            Integer player1Id = player1_user != null ? player1_user.getId() : null;
+            Integer player2Id = player2_user != null ? player2_user.getId() : null;
 
-            System.out.println("DEBUG endGame: winner=" + (winner != null ? winner.getPlayerId() : "null") + 
-                             ", winnerId=" + winnerId + ", player1Id=" + player1Id + ", player2Id=" + player2Id);
-            System.out.println("DEBUG: player1 is WHITE, player2 is BLACK");
-            System.out.println("DEBUG: winner should be the sender who made the winning move");
+            System.out.println("DEBUG endGame:");
+            System.out.println("  Winner: " + (winner != null ? winner.getPlayerId() : "DRAW") +
+                             " (ID: " + winnerId + ")");
+            System.out.println("  Player1 (WHITE): " + player1.getPlayerId() + 
+                             " (ID: " + player1Id + ")");
+            System.out.println("  Player2 (BLACK): " + player2.getPlayerId() + 
+                             " (ID: " + player2Id + ")");
 
-            // Chỉ lưu nếu cả hai người chơi đều có tài khoản
+            // Chỉ lưu kết quả khi cả hai người chơi đều đăng nhập
             if (player1Id != null && player2Id != null) {
                 AuthService authService = new AuthService();
-                boolean success = authService.saveGameResult(player1Id, player2Id, winnerId, isQuickPlay);
+                boolean success = authService.saveGameResult(
+                    player1Id,  // ID người chơi quân trắng
+                    player2Id,  // ID người chơi quân đen
+                    winnerId,   // ID người thắng (có thể null nếu hòa)
+                    isQuickPlay
+                );
+                
                 if (success) {
-                    System.out.println("Game result saved to database for Quick Play match");
+                    String result;
+                    if (draw) {
+                        result = "DRAW";
+                    } else {
+                        result = winner == player1 ? "WHITE_WIN" : "BLACK_WIN";
+                    }
+                    System.out.println("Game result saved: " + result);
+                    
+                    // Cập nhật điểm Elo mới cho người chơi
+                    if (winner_user != null) {
+                        int newElo = authService.getCurrentElo(winner_user.getId());
+                        winner_user.setEloRating(newElo);
+                    }
                 } else {
-                    System.out.println("Failed to save game result to database");
+                    System.err.println("Failed to save game result");
                 }
             } else {
-                System.out.println("DEBUG: Cannot save game result - one or both players are guests");
+                System.out.println("Cannot save game result - guest players present");
             }
         } catch (Exception e) {
-            System.out.println("Error saving game result: " + e.getMessage());
+            System.err.println("Error saving game result: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

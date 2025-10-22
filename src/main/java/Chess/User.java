@@ -12,6 +12,9 @@ public class User {
         this.email = email;
         this.eloRating = eloRating;
     }
+    public void setEloRating(int eloRating) {
+        this.eloRating = eloRating;
+    }
 
     public int getId() { return id; }
     public String getUsername() { return username; }
